@@ -546,14 +546,47 @@
                             correctPlacements++;
                             checkCompletion();
                         } else {
-                            // Wrong placement - return to components container
-                            createComponentElement(component);
+                            // Wrong placement - return the ORIGINAL dragged part to the components container
+                            const originalPartContainer = document.getElementById('parts-container');
 
-                            // Small penalty
+                            // Reset styles to how they should be in the parts container
+                            part.style.position = 'relative'; // Default position in flow
+                            part.style.margin = '10px';       // Restore original margin
+                            part.style.width = '80px';        // Restore original width
+                            part.style.height = '80px';       // Restore original height
+                            part.style.cursor = 'grab';       // Restore grab cursor
+                            part.setAttribute('draggable', 'true'); // Make it draggable again
+
+                            // Ensure the label is visible again
+                            const label = part.querySelector('.part-label');
+                            if (label) {
+                                label.style.display = ''; // Reset display property (or 'block' if needed)
+                            }
+
+                            // Reset/reapply specific styles like rotation for RAM
+                            if (component.id === 'ram1' || component.id === 'ram2') {
+                                part.style.transform = 'rotate(90deg)'; // Re-apply rotation
+                                part.classList.add('ram-module'); // Ensure class is there
+                            } else {
+                                part.style.transform = 'none'; // Remove any potential transform
+                                part.classList.remove('ram-module'); // Ensure class isn't there
+                            }
+
+
+                            // Append the original element back to the parts container
+                            originalPartContainer.appendChild(part);
+
+                            // Optional: Small penalty
                             if (score > 0) {
                                 score -= 1;
                                 scoreElement.textContent = score;
                             }
+                            // Optional: Add visual feedback for wrong placement (e.g., shake)
+                            dropZone.style.borderColor = '#d9534f'; // Red border briefly
+                            setTimeout(() => {
+                                dropZone.style.borderColor = '#666'; // Reset border color
+                            }, 500);
+
                         }
                     });
 
