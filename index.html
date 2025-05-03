@@ -28,6 +28,8 @@
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             padding: 20px;
+            position: relative;
+            /* Needed for fireworks if placed inside */
         }
 
         .game-header {
@@ -49,24 +51,28 @@
         }
 
         .timer {
-            color: #d9534f;
+            color: #333;
+            transition: color 0.5s ease-in-out;
         }
 
         .timer.warning {
-            animation: pulse 1s infinite;
+            animation: pulse-warning 1s infinite;
         }
 
-        @keyframes pulse {
+        @keyframes pulse-warning {
             0% {
                 color: #d9534f;
+                transform: scale(1);
             }
 
             50% {
                 color: #ff0000;
+                transform: scale(1.05);
             }
 
             100% {
                 color: #d9534f;
+                transform: scale(1);
             }
         }
 
@@ -94,11 +100,12 @@
             min-width: 450px;
             position: relative;
             height: 500px;
-            background-image: url('/api/placeholder/600/500');
+            background-image: url('./mobo.png');
             background-size: cover;
             background-position: center;
             border-radius: 8px;
             padding: 15px;
+            overflow: hidden;
         }
 
         .part {
@@ -119,6 +126,8 @@
             background-position: center;
             background-repeat: no-repeat;
             position: relative;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            /* Add transition for smooth dragging effect */
         }
 
         .part-label {
@@ -134,9 +143,17 @@
         }
 
         .part.dragging {
-            opacity: 0.8;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            opacity: 0.9;
+            /* Slightly less opaque */
+            transform: scale(1.1);
+            /* Scale up slightly when dragging */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            /* More prominent shadow */
+            cursor: grabbing;
+            z-index: 10;
+            /* Bring dragged item to front */
         }
+
 
         .drop-zone {
             position: absolute;
@@ -149,11 +166,13 @@
             font-size: 12px;
             text-align: center;
             background-color: rgba(0, 0, 0, 0.3);
+            z-index: 1;
         }
 
         .drop-zone.highlight {
             border-color: #4CAF50;
-            background-color: rgba(76, 175, 80, 0.3);
+            background-color: rgba(76, 175, 80, 0.4);
+            /* Slightly more opaque highlight */
         }
 
         .drop-zone.filled {
@@ -161,6 +180,72 @@
             border-color: #4CAF50;
             background-color: transparent;
         }
+
+        .drop-zone.filled .part {
+            position: static !important;
+            /* Override absolute positioning */
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            transform: none !important;
+            /* Remove any transform */
+        }
+
+        /* Drop Feedback Animations */
+        .drop-zone.correct-drop {
+            animation: correct-flash 0.5s ease-out;
+        }
+
+        @keyframes correct-flash {
+            0% {
+                border-color: #4CAF50;
+                background-color: rgba(76, 175, 80, 0.4);
+            }
+
+            50% {
+                border-color: #8bc34a;
+                background-color: rgba(139, 195, 74, 0.6);
+            }
+
+            /* Brighter green flash */
+            100% {
+                border-color: #4CAF50;
+                background-color: transparent;
+            }
+        }
+
+        .drop-zone.wrong-drop {
+            animation: shake-red 0.5s ease-in-out;
+            border-color: #d9534f !important;
+            /* Keep red during shake */
+        }
+
+        @keyframes shake-red {
+            0% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-5px);
+            }
+
+            40% {
+                transform: translateX(5px);
+            }
+
+            60% {
+                transform: translateX(-5px);
+            }
+
+            80% {
+                transform: translateX(5px);
+            }
+
+            100% {
+                transform: translateX(0);
+            }
+        }
+
 
         .modal {
             display: none;
@@ -217,6 +302,7 @@
             font-size: 12px;
             z-index: 10;
             display: none;
+            pointer-events: none;
         }
 
         .help-btn {
@@ -239,6 +325,36 @@
         .info-panel h3 {
             margin-top: 0;
         }
+
+        /* Fireworks Container and Spark Styling */
+        #fireworks-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            /* Allow interaction behind fireworks */
+            z-index: 99;
+            /* Below the modal but above everything else */
+        }
+
+        .spark {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background-color: #fff;
+            /* Default color, will be randomized */
+        }
+
+        /* Spark Burst Animation (defined dynamically in JS) */
+        /* Example Keyframes (actual values set in JS)
+         @keyframes spark-burst {
+             0% { transform: translate(0, 0) scale(1); opacity: 1; }
+             100% { transform: translate(Xpx, Ypx) scale(0); opacity: 0; }
+         }
+         */
     </style>
 </head>
 
@@ -260,11 +376,9 @@
         <div class="game-area">
             <div class="parts-container" id="parts-container">
                 <h3>Available Components</h3>
-                <!-- Parts will be added here dynamically -->
             </div>
 
             <div class="motherboard-container" id="motherboard-container">
-                <!-- Drop zones will be added here dynamically -->
             </div>
         </div>
 
@@ -290,7 +404,7 @@
     </div>
 
     <div id="tooltip" class="tooltip"></div>
-
+    <div id="fireworks-container"></div>
     <div id="completion-modal" class="modal">
         <div class="modal-content">
             <h2>Congratulations!</h2>
@@ -318,6 +432,7 @@
             const motherboardContainer = document.getElementById('motherboard-container');
             const scoreElement = document.getElementById('score');
             const timerElement = document.getElementById('timer');
+            const timerContainer = timerElement.parentElement; // Get the parent div for the warning class
             const tooltip = document.getElementById('tooltip');
             const modal = document.getElementById('completion-modal');
             const finalScoreElement = document.getElementById('final-score');
@@ -327,6 +442,8 @@
             const helpBtn = document.getElementById('help-btn');
             const resetBtn = document.getElementById('reset-btn');
             const infoPanel = document.getElementById('info-panel');
+            const fireworksContainer = document.getElementById('fireworks-container');
+
 
             // Components data with images
             const components = [
@@ -404,7 +521,7 @@
                 }
             ];
 
-            // Drop zones with positions
+            // Drop zones with positions (keep this here as it's used by createDropZones)
             const dropZones = [
                 { id: 'cpu-zone', name: 'CPU Socket', left: '42%', top: '25%', width: '80px', height: '80px' },
                 { id: 'ram1-zone', name: 'RAM Slot 1', left: '65%', top: '15%', width: '40px', height: '120px' },
@@ -417,6 +534,7 @@
                 { id: 'network-zone', name: 'PCIe x1 Slot', left: '18%', top: '74%', width: '120px', height: '30px' }
             ];
 
+
             totalParts = components.length;
 
             // Timer functions
@@ -428,9 +546,12 @@
                     updateTimerDisplay();
 
                     // Add warning class when time is running low (15 seconds or less)
-                    if (timeLeft <= 15) {
-                        timerElement.parentElement.classList.add('warning');
+                    if (timeLeft <= 15 && !timerContainer.classList.contains('warning')) {
+                        timerContainer.classList.add('warning');
+                    } else if (timeLeft > 15 && timerContainer.classList.contains('warning')) {
+                        timerContainer.classList.remove('warning');
                     }
+
 
                     if (timeLeft <= 0) {
                         endGame();
@@ -447,12 +568,11 @@
             function endGame() {
                 clearInterval(timerInterval);
                 gameActive = false;
+                timerContainer.classList.remove('warning'); // Ensure animation stops
 
-                // Calculate bonus based on time remaining (if completed)
                 if (correctPlacements === totalParts) {
-                    // No need to calculate bonus here, already handled in checkCompletion
+                    // Completion handled by checkCompletion
                 } else {
-                    // Time ran out before completion
                     showTimeOutModal();
                 }
             }
@@ -473,11 +593,8 @@
                 modal.style.display = 'flex';
             }
 
-            // Calculate bonus based on time remaining
+
             function calculateTimeBonus() {
-                // Max bonus of 100 points (if completed instantly)
-                // Minimum of 0 if completed at the last second
-                // Linear scale: more time remaining = higher bonus
                 return Math.round((timeLeft / 60) * 100);
             }
 
@@ -495,7 +612,11 @@
 
                     dropZone.addEventListener('dragover', e => {
                         e.preventDefault();
-                        dropZone.classList.add('highlight');
+                        // Only highlight if a draggable item is being held
+                        const draggedPartId = e.dataTransfer.types.includes('text/plain') ? e.dataTransfer.getData('text/plain') : null;
+                        if (draggedPartId && document.getElementById(draggedPartId)) {
+                            dropZone.classList.add('highlight');
+                        }
                     });
 
                     dropZone.addEventListener('dragleave', () => {
@@ -506,7 +627,6 @@
                         e.preventDefault();
                         dropZone.classList.remove('highlight');
 
-                        // Start the timer on first interaction if not already started
                         if (!gameActive) {
                             startTimer();
                         }
@@ -515,28 +635,89 @@
                         const part = document.getElementById(partId);
                         const component = components.find(c => c.id === partId);
 
-                        if (zone.id === component.correctZone) {
-                            // Correct placement
-                            dropZone.innerHTML = '';
+                        // Prevent dropping on a filled zone or if the part is invalid
+                        if (dropZone.classList.contains('filled') || !part || !component) {
+                            // Optional: visual feedback for dropping on filled zone
+                            if (dropZone.classList.contains('filled')) {
+                                dropZone.classList.add('wrong-drop');
+                                setTimeout(() => dropZone.classList.remove('wrong-drop'), 500);
+                            }
+                            // Return the dragged item to the parts container if it was removed
+                            if (part && !partsContainer.contains(part) && !dropZone.contains(part)) {
+                                resetPartToContainer(part, component);
+                            }
+                            return;
+                        }
+
+                        // Special handling for RAM modules
+                        if ((component.id === 'ram1' || component.id === 'ram2') &&
+                            (zone.id === 'ram1-zone' || zone.id === 'ram2-zone')) {
+                            // This is a RAM module being dropped on a RAM slot
+                            // Consider this a correct placement
+
+                            // Remove the part from the parts container
+                            if (partsContainer.contains(part)) {
+                                partsContainer.removeChild(part);
+                            }
+
+                            // Append the part to the drop zone
+                            dropZone.innerHTML = ''; // Clear text content
                             dropZone.appendChild(part);
                             dropZone.classList.add('filled');
-                            part.style.margin = '0';
-                            part.style.position = 'absolute';
+
+                            // Adjust part styles for placement
+                            part.style.position = 'static'; // Position relative to drop zone
                             part.style.width = '100%';
                             part.style.height = '100%';
+                            part.style.margin = '0';
                             part.style.cursor = 'default';
                             part.setAttribute('draggable', 'false');
+                            part.style.transform = 'none'; // Remove any rotation or scale
 
-                            // Remove label for cleaner appearance
                             const label = part.querySelector('.part-label');
                             if (label) {
                                 label.style.display = 'none';
                             }
 
-                            // Adjust RAM orientation when placed
-                            if (component.id === 'ram1' || component.id === 'ram2') {
-                                part.style.transform = 'none'; // Remove rotation once placed
+                            // Add correct drop animation
+                            dropZone.classList.add('correct-drop');
+                            setTimeout(() => dropZone.classList.remove('correct-drop'), 500);
+
+                            // Update score
+                            score += component.points;
+                            scoreElement.textContent = score;
+
+                            // Check if game is complete
+                            correctPlacements++;
+                            checkCompletion();
+                        }
+                        else if (component.correctZone === zone.id) {
+                            // All other components follow the original logic
+                            // Remove the part from the parts container
+                            partsContainer.removeChild(part);
+
+                            // Append the part to the drop zone
+                            dropZone.innerHTML = ''; // Clear text content
+                            dropZone.appendChild(part);
+                            dropZone.classList.add('filled');
+
+                            // Adjust part styles for placement
+                            part.style.position = 'static'; // Position relative to drop zone
+                            part.style.width = '100%';
+                            part.style.height = '100%';
+                            part.style.margin = '0';
+                            part.style.cursor = 'default';
+                            part.setAttribute('draggable', 'false');
+                            part.style.transform = 'none'; // Remove any rotation or scale
+
+                            const label = part.querySelector('.part-label');
+                            if (label) {
+                                label.style.display = 'none';
                             }
+
+                            // Add correct drop animation
+                            dropZone.classList.add('correct-drop');
+                            setTimeout(() => dropZone.classList.remove('correct-drop'), 500);
 
                             // Update score
                             score += component.points;
@@ -546,47 +727,21 @@
                             correctPlacements++;
                             checkCompletion();
                         } else {
-                            // Wrong placement - return the ORIGINAL dragged part to the components container
-                            const originalPartContainer = document.getElementById('parts-container');
+                            // Wrong placement
+                            // Add wrong drop animation
+                            dropZone.classList.add('wrong-drop');
+                            setTimeout(() => dropZone.classList.remove('wrong-drop'), 500);
 
-                            // Reset styles to how they should be in the parts container
-                            part.style.position = 'relative'; // Default position in flow
-                            part.style.margin = '10px';       // Restore original margin
-                            part.style.width = '80px';        // Restore original width
-                            part.style.height = '80px';       // Restore original height
-                            part.style.cursor = 'grab';       // Restore grab cursor
-                            part.setAttribute('draggable', 'true'); // Make it draggable again
-
-                            // Ensure the label is visible again
-                            const label = part.querySelector('.part-label');
-                            if (label) {
-                                label.style.display = ''; // Reset display property (or 'block' if needed)
+                            // Return the part to the parts container
+                            if (part) {
+                                resetPartToContainer(part, component);
                             }
-
-                            // Reset/reapply specific styles like rotation for RAM
-                            if (component.id === 'ram1' || component.id === 'ram2') {
-                                part.style.transform = 'rotate(90deg)'; // Re-apply rotation
-                                part.classList.add('ram-module'); // Ensure class is there
-                            } else {
-                                part.style.transform = 'none'; // Remove any potential transform
-                                part.classList.remove('ram-module'); // Ensure class isn't there
-                            }
-
-
-                            // Append the original element back to the parts container
-                            originalPartContainer.appendChild(part);
 
                             // Optional: Small penalty
                             if (score > 0) {
                                 score -= 1;
                                 scoreElement.textContent = score;
                             }
-                            // Optional: Add visual feedback for wrong placement (e.g., shake)
-                            dropZone.style.borderColor = '#d9534f'; // Red border briefly
-                            setTimeout(() => {
-                                dropZone.style.borderColor = '#666'; // Reset border color
-                            }, 500);
-
                         }
                     });
 
@@ -594,25 +749,64 @@
                 });
             }
 
+            // Helper to return part to original container with correct styles
+            function resetPartToContainer(part, component) {
+                // Only attempt to reset if the part element still exists
+                if (part) {
+                    part.style.position = 'relative'; // Default position in flow
+                    part.style.margin = '10px';       // Restore original margin
+                    part.style.width = '80px';        // Restore original width
+                    part.style.height = '80px';       // Restore original height
+                    part.style.cursor = 'grab';       // Restore grab cursor
+                    part.setAttribute('draggable', 'true'); // Make it draggable again
+                    part.classList.remove('dragging'); // Ensure dragging class is removed
+
+                    // Ensure the label is visible again
+                    const label = part.querySelector('.part-label');
+                    if (label) {
+                        label.style.display = ''; // Reset display property
+                    }
+
+                    // Reset/reapply specific styles like rotation for RAM
+                    if (component && (component.id === 'ram1' || component.id === 'ram2')) {
+                        part.style.transform = 'rotate(90deg)'; // Re-apply rotation
+                        part.classList.add('ram-module'); // Ensure class is there
+                    } else {
+                        part.style.transform = 'none'; // Remove any potential transform
+                        part.classList.remove('ram-module'); // Ensure class isn't there
+                    }
+
+                    // Append the element back to the parts container
+                    partsContainer.appendChild(part);
+                }
+            }
+
+
             function checkCompletion() {
                 if (correctPlacements === totalParts) {
-                    // Stop the timer
                     clearInterval(timerInterval);
                     gameActive = false;
+                    timerContainer.classList.remove('warning');
 
-                    // Calculate bonus
                     timeBonus = calculateTimeBonus();
                     const finalScore = score + timeBonus;
 
-                    // Update modal
                     componentScoreElement.textContent = score;
                     bonusScoreElement.textContent = timeBonus;
                     finalScoreElement.textContent = finalScore;
 
+                    // Launch fireworks slightly before showing the modal
+                    setTimeout(() => {
+                        launchFireworks(5); // Launch 5 bursts
+                    }, 300); // Short delay
+
+
                     // Show modal after a short delay
                     setTimeout(() => {
                         modal.style.display = 'flex';
-                    }, 500);
+                    }, 1500); // Show modal after fireworks start
+
+
                 }
             }
 
@@ -644,7 +838,8 @@
 
             // Create components
             function createComponents() {
-                components.forEach(component => {
+                const shuffledComponents = components.sort(() => Math.random() - 0.5);
+                shuffledComponents.forEach(component => {
                     createComponentElement(component);
                 });
             }
@@ -652,7 +847,6 @@
             // Setup draggable behavior
             function setupDraggable(element) {
                 element.addEventListener('dragstart', e => {
-                    // Start timer on first interaction
                     if (!gameActive) {
                         startTimer();
                     }
@@ -660,27 +854,59 @@
                     e.dataTransfer.setData('text/plain', element.id);
                     element.classList.add('dragging');
                     hideTooltip();
+                    // For Firefox, set a drag image if the default isn't great
+                    if ('setDragImage' in e.dataTransfer) {
+                        const img = new Image();
+                        img.src = component.image; // Use the component image for the drag image
+                        e.dataTransfer.setDragImage(img, element.offsetWidth / 2, element.offsetHeight / 2);
+                    }
                 });
 
-                element.addEventListener('dragend', () => {
+                element.addEventListener('dragend', e => {
                     element.classList.remove('dragging');
+
+                    // If the drag ended without a drop (e.g., dropped outside valid zone),
+                    // ensure the part is still in the parts container.
+                    // This is largely handled by the drop logic, but this is a fallback.
+                    const partId = element.id;
+                    const component = components.find(c => c.id === partId);
+                    const isInPartsContainer = partsContainer.contains(element);
+                    const isPlaced = document.querySelector(`.drop-zone.filled #${partId}`);
+
+                    if (!isInPartsContainer && !isPlaced) {
+                        // If it's neither in the parts container nor correctly placed,
+                        // it was likely dragged and dropped somewhere invalid.
+                        // Put it back in the parts container.
+                        resetPartToContainer(element, component);
+                    }
+
+
                 });
+
 
                 // Tooltip functionality
                 element.addEventListener('mouseover', e => {
-                    showTooltip(element.dataset.description, e.clientX, e.clientY);
+                    // Check if the element is not currently being dragged
+                    if (!element.classList.contains('dragging')) {
+                        showTooltip(element.dataset.description, e.clientX, e.clientY);
+                    }
                 });
 
                 element.addEventListener('mousemove', e => {
-                    updateTooltipPosition(e.clientX, e.clientY);
+                    if (tooltip.style.display === 'block') { // Only update position if tooltip is visible
+                        updateTooltipPosition(e.clientX, e.clientY);
+                    }
                 });
 
                 element.addEventListener('mouseout', () => {
                     hideTooltip();
                 });
+
+                element.addEventListener('touchstart', hideTooltip);
+                element.addEventListener('touchmove', hideTooltip); // Hide on touch move too
             }
 
-            // Tooltip functions
+            // Tooltip functions (keep the existing functions)
             function showTooltip(text, x, y) {
                 tooltip.textContent = text;
                 tooltip.style.display = 'block';
@@ -688,49 +914,148 @@
             }
 
             function updateTooltipPosition(x, y) {
-                tooltip.style.left = (x + 15) + 'px';
-                tooltip.style.top = (y + 15) + 'px';
+                const tooltipWidth = tooltip.offsetWidth;
+                const tooltipHeight = tooltip.offsetHeight;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                let newX = x + 15;
+                let newY = y + 15;
+
+                if (newX + tooltipWidth > viewportWidth) {
+                    newX = x - tooltipWidth - 15;
+                }
+                if (newY + tooltipHeight > viewportHeight) {
+                    newY = y - tooltipHeight - 15;
+                }
+
+                tooltip.style.left = newX + 'px';
+                tooltip.style.top = newY + 'px';
             }
 
             function hideTooltip() {
                 tooltip.style.display = 'none';
             }
 
-            // Replace placeholder images with real images
-            function loadRealImages() {
-                // Use relative paths with the Pictures folder name
-                motherboardContainer.style.backgroundImage = "url('./mobo.png')";
+
+            // Fireworks Functionality
+
+            function createSpark(x, y, color, xEnd, yEnd) {
+                const spark = document.createElement('div');
+                spark.className = 'spark';
+                spark.style.backgroundColor = color;
+                spark.style.left = `${x}px`;
+                spark.style.top = `${y}px`;
+
+                // Define keyframes dynamically for each spark
+                const sparkAnimationName = `spark-burst-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                const styleSheet = document.styleSheets[0];
+
+                const keyframes = `
+                     @keyframes ${sparkAnimationName} {
+                         0% {
+                             transform: translate(0, 0) scale(1);
+                             opacity: 1;
+                         }
+                         100% {
+                             transform: translate(${xEnd - x}px, ${yEnd - y}px) scale(0.2); /* Move and shrink */
+                             opacity: 0;
+                         }
+                     }
+                 `;
+                styleSheet.insertRule(keyframes, styleSheet.cssRules.length);
+
+
+                // Apply the animation
+                const animationDuration = Math.random() * 0.8 + 0.7; // Duration between 0.7s and 1.5s
+                const animationDelay = Math.random() * 0.3; // Small random delay
+
+                spark.style.animation = `${sparkAnimationName} ${animationDuration}s ease-out ${animationDelay}s forwards`;
+
+                // Remove the element and the keyframes after animation
+                spark.addEventListener('animationend', () => {
+                    spark.remove();
+                    try {
+                        // Attempt to remove the dynamically created keyframe rule
+                        for (let i = 0; i < styleSheet.cssRules.length; i++) {
+                            if (styleSheet.cssRules[i].name === sparkAnimationName) {
+                                styleSheet.deleteRule(i);
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        // Handle potential errors if deleting rule fails (e.g., cross-origin)
+                        console.warn("Could not delete keyframe rule:", e);
+                    }
+                });
+
+                fireworksContainer.appendChild(spark);
             }
+
+            function launchFireworksBurst(x, y, numberOfSparks = 30) {
+                const colors = ['#ff0', '#f00', '#0f0', '#00f', '#f0f', '#0ff', '#fff']; // Firework colors
+                const maxDistance = 150; // Max distance sparks travel from center
+
+                for (let i = 0; i < numberOfSparks; i++) {
+                    const angle = Math.random() * Math.PI * 2; // Random angle in radians
+                    const distance = Math.random() * maxDistance; // Random distance
+
+                    const xEnd = x + distance * Math.cos(angle);
+                    const yEnd = y + distance * Math.sin(angle);
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    createSpark(x, y, color, xEnd, yEnd);
+                }
+            }
+
+            function launchFireworks(numberOfBursts = 3) {
+                const containerRect = fireworksContainer.getBoundingClientRect();
+                const centerX = containerRect.left + containerRect.width / 2;
+                const centerY = containerRect.top + containerRect.height / 2;
+
+                for (let i = 0; i < numberOfBursts; i++) {
+                    // Launch bursts from slightly randomized positions around the center
+                    const offsetX = (Math.random() - 0.5) * containerRect.width * 0.3; // +/- 15% of container width
+                    const offsetY = (Math.random() - 0.5) * containerRect.height * 0.3; // +/- 15% of container height
+
+                    const burstX = centerX + offsetX;
+                    const burstY = centerY + offsetY;
+
+
+                    // Launch bursts with a small delay between them
+                    setTimeout(() => {
+                        launchFireworksBurst(burstX, burstY);
+                    }, i * 300); // 300ms delay between bursts
+                }
+            }
+
 
             // Reset game
             function resetGame() {
-                // Clear motherboard
-                while (motherboardContainer.firstChild) {
-                    motherboardContainer.removeChild(motherboardContainer.firstChild);
-                }
+                document.querySelectorAll('.drop-zone').forEach(zone => {
+                    zone.remove();
+                });
 
-                // Clear parts container
                 const header = partsContainer.querySelector('h3');
                 partsContainer.innerHTML = '';
                 partsContainer.appendChild(header);
 
-                // Reset variables
                 score = 0;
                 correctPlacements = 0;
                 timeLeft = 60;
                 timeBonus = 0;
                 gameActive = false;
 
-                // Reset display
                 scoreElement.textContent = score;
                 updateTimerDisplay();
-                timerElement.parentElement.classList.remove('warning');
+                timerContainer.classList.remove('warning');
                 modal.style.display = 'none';
 
-                // Clear any existing timer
                 clearInterval(timerInterval);
 
-                // Recreate game elements
+                // Clear any lingering sparks
+                fireworksContainer.innerHTML = '';
+
                 createDropZones();
                 createComponents();
             }
@@ -750,7 +1075,6 @@
             playAgainBtn.addEventListener('click', resetGame);
 
             // Initialize game
-            loadRealImages();
             createDropZones();
             createComponents();
             updateTimerDisplay();
